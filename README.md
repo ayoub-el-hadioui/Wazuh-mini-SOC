@@ -10,7 +10,8 @@ This repository implements the **SOC Architect – Technical Challenge** solutio
 ---
 
 ## Architecture Overview
-diagram.png
+![CI/CD and Docker Swarm Diagram](./diagram.png)
+
 
 **Secrets & TLS**
 - GH Actions uses **Encrypted Secrets**; Ansible renders **Swarm secrets** for runtime.
