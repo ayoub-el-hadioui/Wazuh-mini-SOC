@@ -10,33 +10,7 @@ This repository implements the **SOC Architect – Technical Challenge** solutio
 ---
 
 ## Architecture Overview
-
-**High level**
-
-```mermaid
-flowchart LR
-  subgraph CI[GitHub Actions (self‑hosted)]
-    A[Build images] --> B[Trivy scan]
-    B --> C[Selenium + API tests]
-    C -->|main only| D[Ansible deploy]
-  end
-
-  subgraph Swarm[Docker Swarm Cluster]
-    direction LR
-    T[Traefik (TLS/ACME)]:::ing
-    DSH[Wazuh Dashboard]:::app
-    MGR[Wazuh Manager]:::app
-    IDX[(Wazuh Indexer/OpenSearch)]:::db
-
-    T --> DSH
-    DSH --> MGR
-    MGR <--> IDX
-  end
-
-  classDef ing fill:#eee,stroke:#000;
-  classDef app fill:#def,stroke:#0a3;
-  classDef db fill:#fde,stroke:#a03;
-```
+diagram.png
 
 **Secrets & TLS**
 - GH Actions uses **Encrypted Secrets**; Ansible renders **Swarm secrets** for runtime.
