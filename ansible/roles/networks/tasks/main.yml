@@ -1,0 +1,10 @@
+---
+- name: Create overlay networks
+  community.docker.docker_network:
+    name: "{{ item.name }}"
+    driver: overlay
+    attachable: true
+    state: present
+  loop:
+    - { name: "frontend" }
+    - { name: "backend" }

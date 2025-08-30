@@ -1,0 +1,48 @@
+<group name="local,ssh,authentication">
+
+  <!-- Base failed SSH auth event -->
+  <rule id="100010" level="5">
+    <if_sid>0</if_sid>
+    <decoded_as>ssh-auth-local</decoded_as>
+    <field name="status">Failed</field>
+    <description>SSH authentication failed</description>
+    <group>authentication_failed,ssh</group>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- Multiple failed attempts from same srcip within timeframe -->
+  <rule id="100020" level="7">
+    <if_matched_sid>100010</if_matched_sid>
+    <same_source_ip />
+    <frequency>3</frequency>        <!-- tune via group_vars: ssh_fail_threshold -->
+    <timeframe>60</timeframe>        <!-- seconds -->
+    <description>Multiple SSH failures from the same source IP</description>
+    <group>ssh_bruteforce,ssh</group>
+  </rule>
+
+  <!-- Base successful SSH auth event -->
+  <rule id="100030" level="5">
+    <if_sid>0</if_sid>
+    <decoded_as>ssh-auth-local</decoded_as>
+    <field name="status">Accepted</field>
+    <description>SSH authentication successful</description>
+    <group>authentication_success,ssh</group>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- Suspicious pattern: N failures then success from same IP, with a "new" user -->
+  <rule id="100040" level="12">
+    <if_matched_sid>100020</if_matched_sid>        <!-- Prior brute-force from same IP -->
+    <if_matched_sid>100030</if_matched_sid>        <!-- Then a success -->
+    <same_source_ip />
+    <description>Suspicious SSH sequence: multiple failures then success with new user</description>
+    <mitre.id>T1110</mitre.id>
+    <options>no_full_log</options>
+    <group>ssh_suspicious,ssh,authentication</group>
+    <comment>
+      New user detection is simulated using a baseline list mounted in /var/ossec/lists/known_ssh_users.txt
+      and checked by post-processing (enricher script). See docs/LLD.md for details and alternatives (CDB/FTS).
+    </comment>
+  </rule>
+
+</group>

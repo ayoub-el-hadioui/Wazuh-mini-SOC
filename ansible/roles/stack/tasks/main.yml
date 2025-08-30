@@ -1,0 +1,28 @@
+- name: Render local rules
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../..//wz/rules/local_rules.xml.j2"
+    dest: "/tmp/local_rules.xml"
+
+- name: Copy local decoders
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../..//wz/decoders/local_decoders.xml"
+    dest: "/tmp/local_decoders.xml"
+
+- name: Copy known SSH users list
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../..//wz/lists/known_ssh_users.txt"
+    dest: "/tmp/known_ssh_users.txt"
+
+---
+- name: Render stack file
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../roles/stack/templates/wazuh-stack.yml.j2"
+    dest: "/tmp/wazuh-stack.yml"
+
+- name: Deploy/update stack
+  community.docker.docker_stack:
+    name: wazuh
+    state: present
+    with_registry_auth: false
+    compose:
+      - "/tmp/wazuh-stack.yml"

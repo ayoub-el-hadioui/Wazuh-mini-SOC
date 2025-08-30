@@ -1,0 +1,4 @@
+# One 'host:user' pair per line to simulate a 24h "seen users" baseline.
+# In production, populate dynamically (e.g., from /etc/passwd or last 24h successful SSH events).
+server1:root
+server1:ubuntu

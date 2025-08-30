@@ -1,0 +1,11 @@
+---
+- name: Deploy Wazuh stack to Docker Swarm
+  hosts: swarm_managers
+  become: true
+  vars:
+    docker_stack_name: wazuh
+  roles:
+    - role: swarm-init
+    - role: networks
+    - role: secrets
+    - role: stack

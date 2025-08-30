@@ -1,0 +1,100 @@
+name: mini-soc-ci
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+  WAZUH_FQDN: ${{ vars.WAZUH_FQDN || 'wazuh.example.com' }}
+  ACME_EMAIL: ${{ vars.ACME_EMAIL || 'admin@example.com' }}
+  TRIVY_SEVERITY: "CRITICAL,HIGH"
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build tools image (example)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/tools
+          tags: local/tools:${{ env.IMAGE_TAG }}
+          push: false
+          load: true
+
+      - name: Save image digest
+        run: |
+          docker image inspect local/tools:${IMAGE_TAG} --format='{{json .Id}}' > image-digest.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: images
+          path: image-digest.txt
+
+  scan:
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy scan tools image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: local/tools:${{ needs.build.outputs.image_tag || env.IMAGE_TAG }}
+          ignore-unfixed: true
+          severity: ${{ env.TRIVY_SEVERITY }}
+          exit-code: "1"
+
+  test:
+    runs-on: self-hosted
+    needs: scan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test deps
+        run: pip install -r requirements.txt
+      - name: Selenium smoke test (HTTPS + login form)
+        env:
+          DASHBOARD_URL: https://${{ env.WAZUH_FQDN }}
+          TEST_USER: ${{ secrets.WAZUH_TEST_USER || 'test' }}
+          TEST_PASS: ${{ secrets.WAZUH_TEST_PASS || 'test' }}
+        run: pytest -q tests/selenium/test_dashboard.py
+      - name: API health probe
+        env:
+          DASHBOARD_URL: https://${{ env.WAZUH_FQDN }}
+          API_USER: ${{ secrets.WAZUH_API_USER || 'wazuh-wui' }}
+          API_PASS: ${{ secrets.WAZUH_API_PASS || 'CHANGE_ME' }}
+        run: python tests/api/health.py
+
+  deploy:
+    runs-on: self-hosted
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ansible collection
+        run: ansible-galaxy collection install community.docker
+      - name: Deploy to Swarm via Ansible
+        env:
+          WAZUH_ADMIN_PASSWORD: ${{ secrets.WAZUH_ADMIN_PASSWORD }}
+          OPENSEARCH_ADMIN_PASSWORD: ${{ secrets.OPENSEARCH_ADMIN_PASSWORD }}
+          WAZUH_FQDN: ${{ env.WAZUH_FQDN }}
+          ACME_EMAIL: ${{ env.ACME_EMAIL }}
+        run: |
+          ansible-playbook -i ansible/inventories/production/hosts.ini \
+            ansible/playbooks/deploy.yml \
+            -e wazuh_admin_password="${WAZUH_ADMIN_PASSWORD}" \
+            -e opensearch_admin_password="${OPENSEARCH_ADMIN_PASSWORD}" \
+            -e wazuh_fqdn="${WAZUH_FQDN}" \
+            -e acme_email="${ACME_EMAIL}"

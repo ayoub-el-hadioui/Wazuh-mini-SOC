@@ -1,0 +1,16 @@
+---
+- name: Teardown Wazuh stack
+  hosts: swarm_managers
+  become: true
+  tasks:
+    - name: Remove stack
+      community.docker.docker_stack:
+        name: wazuh
+        state: absent
+    - name: Remove networks
+      community.docker.docker_network:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - frontend
+        - backend

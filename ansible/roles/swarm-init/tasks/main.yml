@@ -1,0 +1,5 @@
+---
+- name: Ensure Docker Swarm is initialized (idempotent)
+  community.docker.docker_swarm:
+    state: present
+    advertise_addr: "{{ ansible_host | default(ansible_default_ipv4.address) }}"

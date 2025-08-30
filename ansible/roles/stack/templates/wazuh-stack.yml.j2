@@ -1,0 +1,125 @@
+version: "3.8"
+
+volumes:
+  wazuh-indexer-data: {}
+  wazuh-manager-data: {}
+  traefik-acme: {}
+
+networks:
+  frontend:
+    external: true
+  backend:
+    external: true
+
+secrets:
+  wazuh_admin_password:
+    external: true
+  opensearch_admin_password:
+    external: true
+
+configs:
+  traefik_dynamic:
+    file: {{ playbook_dir }}/../..//configs/traefik/dynamic.yml
+  local_rules_xml:
+    file: /tmp/local_rules.xml
+  local_decoders_xml:
+    file: /tmp/local_decoders.xml
+  known_ssh_users:
+    file: /tmp/known_ssh_users.txt
+
+services:
+  traefik:
+    image: traefik:v2.11
+    command:
+      - --providers.docker.swarmMode=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email={{ acme_email }}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --providers.file.filename=/dynamic/dynamic.yml
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - traefik-acme:/letsencrypt
+    configs:
+      - source: traefik_dynamic
+        target: /dynamic/dynamic.yml
+    deploy:
+      placement:
+        constraints: [ "node.role == manager" ]
+      restart_policy:
+        condition: on-failure
+    networks:
+      - frontend
+
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.9.0
+    environment:
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD_FILE=/run/secrets/opensearch_admin_password"
+      - "discovery.type=single-node"
+    volumes:
+      - wazuh-indexer-data:/var/lib/opensearch
+    deploy:
+      restart_policy: { condition: on-failure }
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+    networks: [ backend ]
+    secrets:
+      - opensearch_admin_password
+
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.9.0
+    environment:
+      - "INDEXER_URL=https://wazuh-indexer:9200"
+      - "INDEXER_USERNAME=admin"
+      - "INDEXER_PASSWORD_FILE=/run/secrets/opensearch_admin_password"
+      - "API_PASSWORD_FILE=/run/secrets/wazuh_admin_password"
+    volumes:
+      - wazuh-manager-data:/var/ossec/data
+    configs:
+      - source: local_rules_xml
+        target: /var/ossec/etc/rules/local_rules.xml
+      - source: local_decoders_xml
+        target: /var/ossec/etc/decoders/local_decoders.xml
+      - source: known_ssh_users
+        target: /var/ossec/lists/known_ssh_users.txt
+    deploy:
+      restart_policy: { condition: on-failure }
+    networks: [ backend ]
+    depends_on:
+      - wazuh-indexer
+    secrets:
+      - opensearch_admin_password
+      - wazuh_admin_password
+
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.9.0
+    environment:
+      - "OPENSEARCH_URL=https://wazuh-indexer:9200"
+      - "OPENSEARCH_USERNAME=admin"
+      - "OPENSEARCH_PASSWORD_FILE=/run/secrets/opensearch_admin_password"
+      - "WAZUH_API_URL=https://wazuh-manager:55000"
+      - "WAZUH_API_USERNAME=admin"
+      - "WAZUH_API_PASSWORD_FILE=/run/secrets/wazuh_admin_password"
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.wazuh.rule=Host(`{{ wazuh_fqdn }}`)"
+        - "traefik.http.routers.wazuh.entrypoints=websecure"
+        - "traefik.http.routers.wazuh.tls.certresolver=le"
+        - "traefik.http.services.wazuh.loadbalancer.server.port=5601"
+      restart_policy: { condition: on-failure }
+    networks: [ frontend, backend ]
+    depends_on:
+      - wazuh-manager
+      - wazuh-indexer
+    secrets:
+      - opensearch_admin_password
+      - wazuh_admin_password

@@ -1,0 +1,8 @@
+<group name="local,ssh">
+  <!-- Local SSH auth decoder to extract status/user/srcip -->
+  <decoder name="ssh-auth-local">
+    <prematch>sshd</prematch>
+    <regex>^(\w{3}\s+\d+\s+\d{2}:\d{2}:\d{2})\s+\S+\s+sshd\[\d+\]:\s+(Failed|Accepted)\s+\w+\s+for\s+(?:invalid user\s+)?([A-Za-z0-9._-]+)\s+from\s+([0-9.]+)</regex>
+    <order>timestamp,status,user,srcip</order>
+  </decoder>
+</group>

@@ -1,0 +1,8 @@
+# Non-secret variables
+wazuh_fqdn: "{{ lookup('env', 'WAZUH_FQDN') | default('wazuh.example.com', true) }}"
+acme_email: "{{ lookup('env', 'ACME_EMAIL') | default('admin@example.com', true) }}"
+
+# Tuneable detection thresholds
+ssh_fail_threshold: 3        # N failed attempts
+ssh_fail_timeframe: 60       # seconds
+ssh_new_user_window: 86400   # seconds (24h)
